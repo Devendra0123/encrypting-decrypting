@@ -149,7 +149,7 @@ const App = () => {
   return (
     <div className="w-screen flex flex-col items-center gap-[10px] mt-[50px]">
       <h2 className="text-xl font-bold underline underline-offset-8">
-        File Encryptor and Decryptor
+       <span className="text-pink-600 font-extrabold text-2xl">PDF</span> File Encryptor and Decryptor
       </h2>
       <input type="file" onChange={handleFileChange} className="mt-[30px]" />
       <br />

@@ -1,30 +1,59 @@
 import React, { useState } from "react";
 
-const staticKey = crypto.getRandomValues(new Uint8Array(32));
+const staticSalt = crypto.getRandomValues(new Uint8Array(16));
 
-const encryptFile = async (fileContent) => {
+const deriveKeyFromPassword = async (password, salt) => {
   try {
-    // Generate a random initialization vector (IV)
-    const iv = crypto.getRandomValues(new Uint8Array(16));
+    const importedKey = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(password),
+      { name: "PBKDF2" },
+      false,
+      ["deriveKey"]
+    );
 
-    // Create an algorithm object with the AES-GCM algorithm and the key
+    const derivedKey = await crypto.subtle.deriveKey(
+      {
+        name: "PBKDF2",
+        salt,
+        iterations: 100000,
+        hash: "SHA-256",
+      },
+      importedKey,
+      { name: "AES-GCM", length: 256 },
+      true,
+      ["encrypt", "decrypt"]
+    );
+
+    return derivedKey;
+  } catch (error) {
+    console.error("Key derivation failed:", error);
+    throw error;
+  }
+};
+
+const encryptFile = async (fileContent, password) => {
+  try {
+    const salt = staticSalt;
+    const key = await deriveKeyFromPassword(password, salt);
+
+    const iv = crypto.getRandomValues(new Uint8Array(16));
     const algorithm = { name: "AES-GCM", iv };
+
     const cryptoKey = await crypto.subtle.importKey(
       "raw",
-      staticKey,
+      await crypto.subtle.exportKey("raw", key),
       algorithm,
       false,
       ["encrypt"]
     );
 
-    // Encrypt the file data
     const encryptedData = await crypto.subtle.encrypt(
       algorithm,
       cryptoKey,
       fileContent
     );
 
-    // Combine the IV and encrypted data into a single array
     const encryptedFile = new Uint8Array(iv.length + encryptedData.byteLength);
     encryptedFile.set(iv, 0);
     encryptedFile.set(new Uint8Array(encryptedData), iv.length);
@@ -32,26 +61,26 @@ const encryptFile = async (fileContent) => {
     return encryptedFile;
   } catch (error) {
     console.error("Encryption failed:", error);
-    throw error; // rethrow the error for better debugging
+    throw error;
   }
 };
 
-const decryptFile = async (encryptedFile) => {
+const decryptFile = async (encryptedFile, password) => {
   try {
-    // Extract the IV from the beginning of the encrypted data
-    const iv = encryptedFile.slice(0, 16);
+    const salt = staticSalt;
+    const key = await deriveKeyFromPassword(password, salt);
 
-    // Create an algorithm object with the AES-GCM algorithm and the key
+    const iv = encryptedFile.slice(0, 16);
     const algorithm = { name: "AES-GCM", iv };
+
     const cryptoKey = await crypto.subtle.importKey(
       "raw",
-      staticKey,
+      await crypto.subtle.exportKey("raw", key),
       algorithm,
       false,
       ["decrypt"]
     );
 
-    // Decrypt the file data (excluding the IV)
     const decryptedData = await crypto.subtle.decrypt(
       algorithm,
       cryptoKey,
@@ -61,7 +90,7 @@ const decryptFile = async (encryptedFile) => {
     return decryptedData;
   } catch (error) {
     console.error("Decryption failed:", error);
-    throw error; // rethrow the error for better debugging
+    throw error;
   }
 };
 
@@ -69,40 +98,47 @@ const App = () => {
   const [file, setFile] = useState(null);
   const [encryptedFile, setEncryptedFile] = useState(null);
   const [decryptedFile, setDecryptedFile] = useState(null);
+  const [password, setPassword] = useState("");
+  const [decryptPassword, setDecryptPassword] = useState(""); // Added input field for decryption password
 
   const handleFileChange = (event) => {
     const selectedFile = event.target.files[0];
     setFile(selectedFile);
   };
 
+  const handlePasswordChange = (event) => {
+    setPassword(event.target.value);
+  };
+
+  const handleDecryptPasswordChange = (event) => {
+    setDecryptPassword(event.target.value);
+  };
+
   const handleEncrypt = async () => {
-    if (file) {
+    if (file && password) {
       const reader = new FileReader();
       reader.onload = async (event) => {
         const fileContent = new Uint8Array(event.target.result);
-        const encryptedFile = await encryptFile(fileContent);
+        const encryptedFile = await encryptFile(fileContent, password);
         setEncryptedFile(encryptedFile);
       };
       reader.readAsArrayBuffer(file);
     } else {
-      alert("Please select a file.");
+      alert("Please select a file and enter a password.");
     }
   };
 
   const handleDecrypt = async () => {
-    if (encryptedFile) {
+    if (encryptedFile && decryptPassword) {
       try {
-        const decryptedData = await decryptFile(encryptedFile);
-
-        // Set the decrypted Blob as the source for display
-        setDecryptedFile(
-          new Blob([decryptedData], { type: "application/pdf" })
-        );
+        const decryptedData = await decryptFile(encryptedFile, decryptPassword);
+        setDecryptedFile(new Blob([decryptedData], { type: "application/pdf" }));
       } catch (error) {
         console.error("Decryption failed:", error);
+        alert("Decryption failed. Incorrect password or corrupted file.");
       }
     } else {
-      alert("Please provide an encrypted file.");
+      alert("Please provide an encrypted file and enter the decryption password.");
     }
   };
 
@@ -111,7 +147,17 @@ const App = () => {
       <h2>File Encryptor and Decryptor</h2>
       <input type="file" onChange={handleFileChange} />
       <br />
+      <label>
+        Enter password for encryption:
+        <input type="password" placeholder="Enter password" onChange={handlePasswordChange} />
+      </label>
+      <br />
       <button onClick={handleEncrypt}>Encrypt File</button>
+      <br />
+      <label>
+        Enter password for decryption:
+        <input type="password" placeholder="Enter decryption password" onChange={handleDecryptPasswordChange} />
+      </label>
       <br />
       <button onClick={handleDecrypt}>Decrypt File</button>
       <br />
@@ -137,17 +183,6 @@ const App = () => {
           ></iframe>
         </div>
       )}
-      {/* for Image
-      {decryptedFile && (
-        <div>
-          <h3>Decrypted File:</h3>
-          <img
-            alt="Decrypted File"
-            src={URL.createObjectURL(decryptedFile)}
-            style={{ maxWidth: "100%", height: "auto" }}
-          />
-        </div>
-      )} */}
       {decryptedFile && (
         <div>
           <h3>Decrypted File:</h3>

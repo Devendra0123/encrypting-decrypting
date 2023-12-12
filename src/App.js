@@ -96,6 +96,7 @@ const decryptFile = async (encryptedFile, password) => {
 
 const App = () => {
   const [file, setFile] = useState(null);
+  const [fileType, setFileType] = useState();
   const [encryptedFile, setEncryptedFile] = useState(null);
   const [decryptedFile, setDecryptedFile] = useState(null);
   const [password, setPassword] = useState("");
@@ -103,6 +104,8 @@ const App = () => {
 
   const handleFileChange = (event) => {
     const selectedFile = event.target.files[0];
+    console.log(selectedFile.type)
+    setFileType(selectedFile.type);
     setFile(selectedFile);
   };
 
@@ -149,9 +152,11 @@ const App = () => {
   return (
     <div className="w-screen flex flex-col items-center gap-[10px] mt-[50px]">
       <h2 className="text-xl font-bold underline underline-offset-8">
-       <span className="text-pink-600 font-extrabold text-2xl">PDF</span> File Encryptor and Decryptor
+        <span className="text-pink-600 font-extrabold text-2xl">PDF</span>/
+        <span className="text-blue-600 font-extrabold text-2xl">Image</span>{" "}
+        File Encryptor and Decryptor
       </h2>
-      <input type="file" onChange={handleFileChange} className="mt-[30px]" />
+      <input type="file" accept=".pdf,image/png, image/jpeg" onChange={handleFileChange} className="mt-[30px]" />
       <br />
       <label>
         Enter password for encryption:
@@ -201,7 +206,7 @@ const App = () => {
             </a>
           </div>
         )}
-        {decryptedFile && (
+        {decryptedFile && fileType === "application/pdf" ? (
           <div className="flex flex-col gap-[10px]">
             <h3>Decrypted File:</h3>
             <iframe
@@ -211,7 +216,21 @@ const App = () => {
               height="400px"
             ></iframe>
           </div>
-        )}
+        ) : decryptedFile &&
+          (fileType === "image/jpeg" ||
+            fileType === "image/png" ||
+            fileType === "image/jpg" ||
+            fileType === "image/webp") ? (
+          <div className="flex flex-col gap-[10px]">
+            <h3>Decrypted File:</h3>
+            <img
+              src={URL.createObjectURL(decryptedFile)}
+              alt="decryptedImage"
+              width="500px"
+              height="400px"
+            />
+          </div>
+        ) : null}
         {decryptedFile && (
           <div className="flex flex-col gap-[10px]">
             <h3>Decrypted File:</h3>
